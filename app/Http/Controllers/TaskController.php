@@ -11,19 +11,37 @@ class TaskController extends Controller
 {
     public function index(Request $request)
     {
-        // Fitur Filter: Bisa mencari berdasarkan status (pending/in_progress/done)
+        $user = $request->user();
         $query = Task::query();
+
+        if ($user->role === 'direktur') {
+            $query->where('direktur_id', $user->id);
+        } elseif ($user->role === 'sekretaris') {
+            $query->where('sekretaris_id', $user->id);
+        }
+
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
         
         $tasks = $query->latest()->get();
-        return TaskResource::collection($tasks);
+        
+        return response()->json([
+            'message' => 'Berhasil mengambil daftar tugas',
+            'data' => TaskResource::collection($tasks)
+        ], 200);
     }
 
     public function store(Request $request)
     {
-        // Validasi input untuk Direktur saat membuat tugas
+        $user = $request->user();
+
+        if ($user->role !== 'direktur') {
+            return response()->json([
+                'message' => 'Akses ditolak. Hanya Direktur yang dapat membuat tugas.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -33,66 +51,115 @@ class TaskController extends Controller
         $task = Task::create([
             'title' => $validated['title'],
             'description' => $validated['description'],
-            'direktur_id' => $request->user()->id, // Diambil otomatis dari token login Direktur
+            'direktur_id' => $user->id,
             'sekretaris_id' => $validated['sekretaris_id'],
             'status' => 'pending',
         ]);
 
         return response()->json([
-            'message' => 'Task berhasil dibuat',
+            'message' => 'Tugas berhasil dibuat',
             'data' => new TaskResource($task)
         ], 201);
     }
 
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
+        $user = $request->user();
         $task = Task::findOrFail($id);
-        return new TaskResource($task);
+
+        if ($user->role === 'direktur' && $task->direktur_id !== $user->id) {
+            return response()->json(['message' => 'Kamu tidak memiliki akses ke tugas ini.'], 403);
+        }
+        if ($user->role === 'sekretaris' && $task->sekretaris_id !== $user->id) {
+            return response()->json(['message' => 'Kamu tidak memiliki akses ke tugas ini.'], 403);
+        }
+
+        return response()->json([
+            'message' => 'Berhasil mengambil detail tugas',
+            'data' => new TaskResource($task)
+        ], 200);
     }
 
     public function update(Request $request, string $id)
     {
+        $user = $request->user();
         $task = Task::findOrFail($id);
 
-        // Validasi update: Sekretaris bisa mengubah status dan mengunggah file laporan
-        $validated = $request->validate([
-            'status' => 'nullable|in:pending,in_progress,done',
-            'attachment' => 'nullable|file|mimes:pdf,jpg,png,docx|max:5120', // Maks 5MB
-        ]);
-
-        if ($request->has('status')) {
-            $task->status = $validated['status'];
-        }
-
-        // Logika Upload File
-        if ($request->hasFile('attachment')) {
-            // Hapus file lama jika ada
-            if ($task->attachment_url) {
-                Storage::disk('public')->delete($task->attachment_url);
+        if ($user->role === 'sekretaris') {
+            if ($task->sekretaris_id !== $user->id) {
+                return response()->json(['message' => 'Ini bukan tugas milikmu!'], 403);
             }
-            // Simpan file baru ke folder public/tasks
-            $path = $request->file('attachment')->store('tasks', 'public');
-            $task->attachment_url = $path;
+
+            $validated = $request->validate([
+                'status' => 'nullable|in:pending,in_progress,done',
+                'attachment' => 'nullable|file|mimes:pdf,jpg,png,docx|max:5120',
+            ]);
+
+            if ($request->has('status')) {
+                $task->status = $validated['status'];
+            }
+
+            if ($request->hasFile('attachment')) {
+                if ($task->attachment_url) {
+                    Storage::disk('public')->delete($task->attachment_url);
+                }
+                $task->attachment_url = $request->file('attachment')->store('tasks', 'public');
+            }
+
+        } elseif ($user->role === 'direktur') {
+            if ($task->direktur_id !== $user->id) {
+                return response()->json(['message' => 'Kamu tidak bisa mengubah tugas buatan direktur lain!'], 403);
+            }
+
+            if ($request->has('status') || $request->hasFile('attachment')) {
+                return response()->json([
+                    'message' => 'Direktur tidak memiliki izin untuk mengubah status atau file laporan tugas.'
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'title' => 'nullable|string|max:255',
+                'description' => 'nullable|string',
+                'sekretaris_id' => 'nullable|exists:users,id',
+            ]);
+
+            if ($request->has('title')) {
+                $task->title = $validated['title'];
+            }
+            if ($request->has('description')) {
+                $task->description = $validated['description'];
+            }
+            if ($request->has('sekretaris_id')) {
+                $task->sekretaris_id = $validated['sekretaris_id'];
+            }
         }
 
         $task->save();
 
         return response()->json([
-            'message' => 'Task berhasil diupdate',
+            'message' => 'Tugas berhasil diupdate',
             'data' => new TaskResource($task)
-        ]);
+        ], 200);
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
+        $user = $request->user();
         $task = Task::findOrFail($id);
+
+        if ($user->role !== 'direktur') {
+            return response()->json(['message' => 'Hanya Direktur yang dapat menghapus tugas.'], 403);
+        }
+        if ($task->direktur_id !== $user->id) {
+            return response()->json(['message' => 'Kamu tidak dapat menghapus tugas buatan direktur lain.'], 403);
+        }
         
-        // Hapus file fisik jika ada sebelum menghapus data di database
         if ($task->attachment_url) {
             Storage::disk('public')->delete($task->attachment_url);
         }
         
         $task->delete();
-        return response()->json(['message' => 'Task berhasil dihapus']);
+        
+        return response()->json(['message' => 'Tugas berhasil dihapus dengan aman'], 200);
     }
 }
