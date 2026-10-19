@@ -9,11 +9,8 @@ ExecSync adalah RESTful API berbasis Laravel 11 untuk mengelola delegasi tugas a
   - **Direktur:** Dapat membuat tugas baru, mengedit judul dan deskripsi tugas, menghapus tugas, serta memantau tugas yang dibuatnya.
   - **Sekretaris:** Dapat memperbarui status tugas menjadi `pending`, `in_progress`, atau `done`, serta mengunggah file lampiran laporan.
 - **Isolasi Data:** Direktur hanya dapat mengakses tugas yang dibuatnya sendiri, sedangkan Sekretaris hanya dapat mengakses tugas yang ditugaskan kepadanya.
-- **Manajemen File:** Mendukung unggahan file lampiran melalui *HTTP method spoofing* menggunakan parameter `_method=PUT` atau `_method=PATCH` pada request `POST` dengan format `multipart/form-data`.
-- **Query Parameter pada `GET /api/tasks`:**
-  - **Penyaringan (Filter):** Gunakan parameter `status` untuk memfilter tugas berdasarkan status, misalnya `/api/tasks?status=pending`.
-  - **Pencarian (Search):** Gunakan parameter `search` untuk mencari tugas berdasarkan judul atau deskripsi, misalnya `/api/tasks?search=laporan`.
-  - **Kombinasi Filter dan Search:** Kedua parameter dapat digunakan secara bersamaan, misalnya `/api/tasks?status=done&search=keuangan`.
+- **Manajemen File:** Mendukung unggahan file lampiran menggunakan HTTP method spoofing melalui parameter `_method=PUT` atau `_method=PATCH` pada request `POST` dengan format `multipart/form-data`.
+- **Pencarian dan Penyaringan:** Mendukung *query parameters* pada endpoint `GET /api/tasks` untuk mencari tugas berdasarkan judul atau deskripsi serta memfilter tugas berdasarkan status.
 
 ## 🛠️ Teknologi yang Digunakan
 
@@ -21,7 +18,6 @@ ExecSync adalah RESTful API berbasis Laravel 11 untuk mengelola delegasi tugas a
 - **Bahasa Pemrograman:** PHP 8.2+
 - **Database:** MySQL
 - **Autentikasi:** Laravel Sanctum
-- **Pengujian API:** Postman
 
 ## 📋 Prasyarat
 
@@ -49,13 +45,13 @@ composer install
 
 ### 3. Konfigurasi Environment
 
-Salin file konfigurasi environment:
+Salin file `.env.example` menjadi `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
-> **Catatan untuk Windows:** Kamu juga bisa menyalin `.env.example` menjadi `.env` secara manual melalui File Explorer.
+Pada Windows, kamu juga dapat menyalin file `.env.example` secara manual melalui File Explorer.
 
 ### 4. Generate Application Key
 
@@ -65,7 +61,7 @@ php artisan key:generate
 
 ### 5. Konfigurasi Database
 
-Buka file `.env`, kemudian sesuaikan konfigurasi database MySQL dengan pengaturan lokalmu:
+Buat database bernama `exec_sync` di MySQL. Kemudian, sesuaikan konfigurasi database pada file `.env`:
 
 ```env
 DB_CONNECTION=mysql
@@ -76,49 +72,120 @@ DB_USERNAME=root
 DB_PASSWORD=
 ```
 
-Pastikan database `exec_sync` sudah dibuat di MySQL sebelum melanjutkan.
+Sesuaikan `DB_USERNAME` dan `DB_PASSWORD` dengan konfigurasi MySQL lokalmu.
 
-### 6. Jalankan Migrasi Database
+### 6. Jalankan Migrasi dan Seeder
+
+Jalankan perintah berikut untuk membuat tabel sekaligus mengisi data awal melalui seeder:
 
 ```bash
-php artisan migrate
+php artisan migrate --seed
 ```
 
-### 7. Jalankan Server Lokal
+Jika tabel sudah tersedia dan kamu hanya ingin menjalankan seeder:
+
+```bash
+php artisan db:seed
+```
+
+### 7. Tautkan Storage File
+
+Agar file lampiran tugas dapat diakses melalui URL publik, jalankan:
+
+```bash
+php artisan storage:link
+```
+
+### 8. Jalankan Server Lokal
 
 ```bash
 php artisan serve
 ```
 
-Secara default, API dapat diakses melalui:
+Secara default, aplikasi dapat diakses melalui:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-## 🧪 Pengujian API
+## 🌐 Dokumentasi Endpoint API
 
-Pengujian endpoint dapat dilakukan menggunakan Postman dengan langkah berikut:
+Endpoint yang memerlukan autentikasi harus menyertakan header berikut:
 
-1. Jalankan server Laravel.
-2. Lakukan autentikasi melalui endpoint login yang tersedia.
-3. Gunakan token yang diperoleh sebagai *Bearer Token* pada request yang memerlukan autentikasi.
-4. Uji endpoint sesuai dengan role Direktur atau Sekretaris.
-5. Uji fitur filter menggunakan parameter `status`, misalnya `GET /api/tasks?status=pending`.
-6. Uji fitur pencarian menggunakan parameter `search`, misalnya `GET /api/tasks?search=laporan`.
-7. Uji kombinasi filter dan pencarian, misalnya `GET /api/tasks?status=done&search=keuangan`.
-8. Pastikan setiap pengguna hanya dapat mengakses tugas sesuai dengan hak akses dan kepemilikannya.
+| Header | Nilai |
+|---|---|
+| `Accept` | `application/json` |
+| `Authorization` | `Bearer {token_anda}` |
+
+Header `Authorization` tidak diperlukan untuk endpoint autentikasi yang bersifat publik.
+
+### 1. Autentikasi
+
+| Method | Endpoint | Deskripsi | Akses |
+|---|---|---|---|
+| `POST` | `/api/register` | Mendaftarkan akun baru | Publik |
+| `POST` | `/api/login` | Melakukan autentikasi dan memperoleh token | Publik |
+
+### 2. Manajemen Tugas (*Tasks*)
+
+| Method | Endpoint | Deskripsi | Akses |
+|---|---|---|---|
+| `GET` | `/api/tasks` | Mengambil daftar tugas sesuai hak akses | Direktur / Sekretaris |
+| `POST` | `/api/tasks` | Membuat delegasi tugas baru | Direktur |
+| `GET` | `/api/tasks/{id}` | Mengambil detail tugas berdasarkan ID | Direktur / Sekretaris |
+| `POST` | `/api/tasks/{id}` | Memperbarui tugas menggunakan method spoofing | Sesuai hak akses |
+| `DELETE` | `/api/tasks/{id}` | Menghapus tugas beserta file lampirannya | Direktur |
+
+**Catatan:** Endpoint pembaruan menggunakan `POST` dengan parameter `_method=PUT` atau `_method=PATCH` apabila diperlukan untuk unggahan file melalui `multipart/form-data`. Hak akses tetap mengikuti aturan role dan kepemilikan tugas yang diterapkan pada backend.
+
+### 3. Query Parameter: Filter dan Search
+
+Endpoint `GET /api/tasks` mendukung parameter untuk menyaring dan mencari tugas.
+
+| Fitur | Parameter | Contoh |
+|---|---|---|
+| Filter berdasarkan status | `status` | `/api/tasks?status=pending` |
+| Pencarian berdasarkan judul atau deskripsi | `search` | `/api/tasks?search=laporan` |
+| Kombinasi filter dan pencarian | `status` dan `search` | `/api/tasks?status=done&search=keuangan` |
+
+**Keterangan:**
+
+- **Filter (`status`):** Menampilkan tugas berdasarkan status, seperti `pending`, `in_progress`, atau `done`.
+- **Search (`search`):** Mencari tugas berdasarkan kata kunci pada judul atau deskripsi.
+- **Kombinasi:** Kedua parameter dapat digunakan secara bersamaan untuk mempersempit hasil pencarian.
+
+Contoh request:
+
+```http
+GET /api/tasks?status=done&search=keuangan
+```
+
+Contoh tersebut digunakan untuk mencari tugas berstatus `done` yang judul atau deskripsinya cocok dengan kata kunci `keuangan`.
+
+## 🔑 Akun Pengujian (Seeder)
+
+Setelah menjalankan seeder, akun berikut dapat digunakan untuk pengujian apabila memang telah didefinisikan dalam konfigurasi seeder proyek:
+
+| Role | Email | Password |
+|---|---|---|
+| Direktur | `direktur@test.com` | `password123` |
+| Sekretaris | `sekretaris@test.com` | `password123` |
+
+**Catatan keamanan:** Akun tersebut ditujukan untuk pengujian lokal. Jangan gunakan kredensial bawaan ini pada lingkungan produksi.
 
 ## 🔐 Keamanan
 
-ExecSync menerapkan autentikasi berbasis token, pembatasan akses berdasarkan role, dan isolasi data berdasarkan kepemilikan tugas. Pengguna yang tidak memiliki izin tidak seharusnya dapat mengakses atau mengubah tugas milik pengguna lain.
+ExecSync menerapkan autentikasi berbasis token, pembatasan akses berdasarkan role, dan isolasi data berdasarkan kepemilikan tugas. Setiap pengguna hanya boleh mengakses atau mengubah tugas sesuai dengan hak aksesnya.
 
-## 👩‍💻 Pengembang
+## 👨‍💻 Pengembang
 
-**Bintang Permatasari**
+**Ni Putu Bintang Permatasari**
+
+Mahasiswa S1 Ilmu Komputer  
+Universitas Pendidikan Ganesha (Undiksha)
 
 GitHub: [@bintangcloud](https://github.com/bintangcloud)
 
 ---
 
-Dibuat sebagai proyek pengembangan RESTful API menggunakan Laravel.
+Dibuat sebagai proyek pengembangan RESTful API menggunakan Laravel 11.
