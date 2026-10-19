@@ -23,6 +23,14 @@ class TaskController extends Controller
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
+
+        if ($request->has('search')) {
+            $keyword = $request->search;
+            $query->where(function($q) use ($keyword) {
+                $q->where('title', 'like', "%{$keyword}%")
+                ->orWhere('description', 'like', "%{$keyword}%");
+            });
+        }
         
         $tasks = $query->latest()->get();
         

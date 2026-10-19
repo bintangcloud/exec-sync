@@ -19,7 +19,7 @@ class TaskResource extends JsonResource
             'title' => $this->title,
             'description' => $this->description,
             'status' => $this->status,
-            'attachment_url' => $this->attachment_url ? url($this->attachment_url) : null,
+            'attachment_url' => $this->attachment_url ? asset('storage/' . $this->attachment_url) : null,
             'direktur_id' => $this->direktur_id,
             'sekretaris_id' => $this->sekretaris_id,
             'created_at' => $this->created_at,
