@@ -10,6 +10,10 @@ ExecSync adalah RESTful API berbasis Laravel 11 untuk mengelola delegasi tugas a
   - **Sekretaris:** Dapat memperbarui status tugas menjadi `pending`, `in_progress`, atau `done`, serta mengunggah file lampiran laporan.
 - **Isolasi Data:** Direktur hanya dapat mengakses tugas yang dibuatnya sendiri, sedangkan Sekretaris hanya dapat mengakses tugas yang ditugaskan kepadanya.
 - **Manajemen File:** Mendukung unggahan file lampiran melalui *HTTP method spoofing* menggunakan parameter `_method=PUT` atau `_method=PATCH` pada request `POST` dengan format `multipart/form-data`.
+- **Query Parameter pada `GET /api/tasks`:**
+  - **Penyaringan (Filter):** Gunakan parameter `status` untuk memfilter tugas berdasarkan status, misalnya `/api/tasks?status=pending`.
+  - **Pencarian (Search):** Gunakan parameter `search` untuk mencari tugas berdasarkan judul atau deskripsi, misalnya `/api/tasks?search=laporan`.
+  - **Kombinasi Filter dan Search:** Kedua parameter dapat digunakan secara bersamaan, misalnya `/api/tasks?status=done&search=keuangan`.
 
 ## 🛠️ Teknologi yang Digunakan
 
@@ -100,7 +104,10 @@ Pengujian endpoint dapat dilakukan menggunakan Postman dengan langkah berikut:
 2. Lakukan autentikasi melalui endpoint login yang tersedia.
 3. Gunakan token yang diperoleh sebagai *Bearer Token* pada request yang memerlukan autentikasi.
 4. Uji endpoint sesuai dengan role Direktur atau Sekretaris.
-5. Pastikan setiap pengguna hanya dapat mengakses tugas sesuai dengan hak akses dan kepemilikannya.
+5. Uji fitur filter menggunakan parameter `status`, misalnya `GET /api/tasks?status=pending`.
+6. Uji fitur pencarian menggunakan parameter `search`, misalnya `GET /api/tasks?search=laporan`.
+7. Uji kombinasi filter dan pencarian, misalnya `GET /api/tasks?status=done&search=keuangan`.
+8. Pastikan setiap pengguna hanya dapat mengakses tugas sesuai dengan hak akses dan kepemilikannya.
 
 ## 🔐 Keamanan
 
